@@ -64,7 +64,7 @@ def split_args(kwargs: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
   return init_args, method_args
 
 
-def write_to_artifact(executor_input, text):
+def write_to_artifact(executor_input, text, api_endpoint):
   """Write output to local artifact and metadata path (uses GCSFuse)."""
 
   output_artifacts = {}
@@ -89,7 +89,7 @@ def write_to_artifact(executor_input, text):
       # "https://[location]-aiplatform.googleapis.com/API_VERSION/": For AI Platform resource names, current version is defined in AIPLATFORM_API_VERSION.
       if RESOURCE_NAME_PATTERN.match(text):
         location = re.findall('locations/([\w\-]+)', text)[0]
-        uri_with_prefix = f'https://{location}-aiplatform.googleapis.com/{AIPLATFORM_API_VERSION}/{text}'
+        uri_with_prefix = f'https://{location}-{api_endpoint}/{AIPLATFORM_API_VERSION}/{text}'
         metadata.update({'resourceName': text})
 
       # "gcs://": For Google Cloud Storage resources.
@@ -257,7 +257,7 @@ def attach_system_labels(method_args, cls_name, method_name):
   return method_args
 
 
-def runner(cls_name, method_name, executor_input, kwargs):
+def runner(cls_name, method_name, executor_input, kwargs, api_endpoint):
   cls = getattr(aiplatform, cls_name)
 
   init_args, method_args = split_args(kwargs)
@@ -283,7 +283,7 @@ def runner(cls_name, method_name, executor_input, kwargs):
     print('resource_name: %s', obj.resource_name)
 
     if output:
-      write_to_artifact(executor_input, make_output(output))
+      write_to_artifact(executor_input, make_output(output), api_endpoint=api_endpoint)
       return output
 
 
@@ -292,6 +292,7 @@ def main():
   parser.add_argument('--cls_name', type=str)
   parser.add_argument('--method_name', type=str)
   parser.add_argument('--executor_input', type=str, default=None)
+  parser.add_argument('--api_endpoint', type=str, default='aiplatform.googleapis.com')
 
   args, unknown_args = parser.parse_known_args()
   kwargs = {}
@@ -314,8 +315,9 @@ def main():
 
   # Update user agent header for metrics reporting
   aiplatform.constants.USER_AGENT_PRODUCT = 'google-cloud-pipeline-components'
+  aiplatform.constants.base.API_BASE_PATH = args.api_endpoint
 
-  print(runner(args.cls_name, args.method_name, executor_input, kwargs))
+  print(runner(args.cls_name, args.method_name, executor_input, kwargs, api_endpoint=args.api_endpoint))
 
 
 if __name__ == '__main__':
